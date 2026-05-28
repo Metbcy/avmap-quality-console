@@ -70,6 +70,7 @@ const DiffReviewer: React.FC = () => {
         <nav className="flex gap-6 text-sm">
           <Link href="/" className="text-gray-500 hover:text-gray-300 transition-colors">Triage</Link>
           <Link href="/diff" className="text-indigo-400 font-medium">Diff</Link>
+          <Link href="/lanelet" className="text-gray-500 hover:text-gray-300 transition-colors">Lanelet2</Link>
         </nav>
       </header>
 

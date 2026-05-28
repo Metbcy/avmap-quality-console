@@ -80,7 +80,7 @@ export default function TriagePage() {
   );
 }
 
-function TopBar({ active }: { active: "triage" | "diff" }) {
+function TopBar({ active }: { active: "triage" | "diff" | "lanelet" }) {
   return (
     <div className="flex h-12 items-center justify-between border-b border-gray-800 bg-gray-950 px-4">
       <div className="flex items-center gap-2">
@@ -103,6 +103,14 @@ function TopBar({ active }: { active: "triage" | "diff" }) {
           }`}
         >
           Diff
+        </Link>
+        <Link
+          href="/lanelet"
+          className={`rounded px-2.5 py-1 ${
+            active === "lanelet" ? "bg-gray-800 text-indigo-300" : "text-gray-400 hover:text-gray-200"
+          }`}
+        >
+          Lanelet2
         </Link>
       </nav>
     </div>

@@ -14,6 +14,8 @@ Two views, both server-rendered with client-side map interactivity:
 
 **Diff** (`/diff`) — side-by-side baseline-vs-candidate map view with a queue of pending changes (new lane, moved crosswalk, removed stop sign, blocker construction). Approve or reject inline with a comment.
 
+**Lanelet2 sample** — at `/lanelet`. Imports the upstream BSD-3 sample (`mapping_example.osm`) from FZI's Lanelet2 repo. Demonstrates parsing the OSM-extension HD-map format used by Autoware.
+
 ## Stack
 
 - Next.js 16 App Router, TypeScript strict
@@ -52,6 +54,8 @@ xvfb-run -a -s "-screen 0 1440x900x24" node scripts/screenshots.mjs
 ## Data & attribution
 
 Road network © OpenStreetMap contributors, ODbL. Basemap © CARTO. All readiness scores and pending diffs are synthetic, generated locally with a seeded PRNG (`mulberry32` + `fnv1a`) — no real fleet data, no proprietary signals.
+
+Lanelet2 sample data: © FZI Forschungszentrum Informatik, BSD-3-Clause. The file `public/data/lanelet2_mapping_example.osm` is the upstream `mapping_example.osm` from [fzi-forschungszentrum-informatik/Lanelet2](https://github.com/fzi-forschungszentrum-informatik/Lanelet2).
 
 ## License
 
