@@ -1,4 +1,5 @@
-// TODO: replaced by diff view
+import DiffReviewer from '@/components/diff/DiffReviewer';
+
 export default function DiffPage() {
-  return <main className="p-8">Diff Reviewer placeholder</main>;
+  return <DiffReviewer />;
 }
