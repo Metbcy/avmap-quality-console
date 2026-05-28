@@ -27,7 +27,7 @@ export default function LaneletView() {
 
   useEffect(() => {
     let cancelled = false;
-    fetch(asset("/data/lanelet2_mapping_example.osm"))
+    fetch(asset("/data/lanelet2_sf_synthetic.osm"))
       .then((r) => {
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
         return r.text();
@@ -86,7 +86,9 @@ export default function LaneletView() {
           selected={selected}
           onClear={() => setSelected(null)}
         />
-        <div className="relative flex-1">
+        <div className="relative flex-1 flex flex-col">
+          <SourceBanner />
+          <div className="relative flex-1">
           {state.kind === "ready" ? (
             <LaneletMap
               data={state.data}
@@ -101,9 +103,29 @@ export default function LaneletView() {
                 : `Failed to load sample: ${state.message}`}
             </div>
           )}
+          </div>
         </div>
       </div>
       <StatusBar stats={stats} ready={state.kind === "ready"} />
+    </div>
+  );
+}
+
+function SourceBanner() {
+  return (
+    <div className="border-b border-gray-800 bg-gray-900 px-4 py-2">
+      <div className="flex items-baseline gap-2">
+        <span className="text-[10px] uppercase tracking-wide text-gray-500">
+          extended demo
+        </span>
+        <span className="text-xs text-gray-300">
+          Synthetic Lanelet2 slice generated from OpenStreetMap centerlines around
+          downtown San Francisco (left and right boundaries offset 2m
+          perpendicular to each centerline). Production HD maps are
+          sensor-derived and proprietary, so this stands in for one as a format
+          and tooling demo, not a survey.
+        </span>
+      </div>
     </div>
   );
 }
@@ -147,7 +169,7 @@ function StatusBar({
       <Stat label="regulatory elements" value={stats.regulatoryElementCount.toString()} />
       <div className="ml-auto flex items-center gap-2 text-gray-500">
         <span className="text-[10px] uppercase tracking-widest">source</span>
-        <span className="font-mono text-gray-300">fzi/Lanelet2 mapping_example.osm</span>
+        <span className="font-mono text-gray-300">lanelet2_sf_synthetic.osm</span>
         <span
           className={`ml-2 inline-block h-1.5 w-1.5 rounded-full ${
             ready ? "bg-emerald-400" : "bg-gray-600"

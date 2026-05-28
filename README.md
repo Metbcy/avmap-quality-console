@@ -14,7 +14,7 @@ Two views, both server-rendered with client-side map interactivity:
 
 **Diff** (`/diff`) — side-by-side baseline-vs-candidate map view with a queue of pending changes (new lane, moved crosswalk, removed stop sign, blocker construction). Approve or reject inline with a comment.
 
-**Lanelet2 sample** — at `/lanelet`. Imports the upstream BSD-3 sample (`mapping_example.osm`) from FZI's Lanelet2 repo. Demonstrates parsing the OSM-extension HD-map format used by Autoware.
+**Lanelet2 sample** — at `/lanelet`. Loads `public/data/lanelet2_sf_synthetic.osm`, a small Lanelet2-format slice synthesized from the SF OpenStreetMap extract. The script `scripts/synthesize-lanelet.ts` picks ~50 short road centerlines around downtown SF (lon -122.41 to -122.40, lat 37.78 to 37.79), duplicates each one twice, and offsets the copies +/-2m perpendicular to the local tangent (flat-earth approximation at SF latitude) to form synthetic left and right boundaries wrapped in `type=lanelet subtype=road` relations. It is a tooling and parser demo, not a survey: production HD maps are sensor-derived and proprietary.
 
 ## Stack
 
@@ -55,7 +55,7 @@ xvfb-run -a -s "-screen 0 1440x900x24" node scripts/screenshots.mjs
 
 Road network © OpenStreetMap contributors, ODbL. Basemap © CARTO. All readiness scores and pending diffs are synthetic, generated locally with a seeded PRNG (`mulberry32` + `fnv1a`) — no real fleet data, no proprietary signals.
 
-Lanelet2 sample data: © FZI Forschungszentrum Informatik, BSD-3-Clause. The file `public/data/lanelet2_mapping_example.osm` is the upstream `mapping_example.osm` from [fzi-forschungszentrum-informatik/Lanelet2](https://github.com/fzi-forschungszentrum-informatik/Lanelet2).
+Lanelet2 sample data: the file `public/data/lanelet2_sf_synthetic.osm` is generated locally by `scripts/synthesize-lanelet.ts` from `public/data/sf.geojson` (OpenStreetMap, ODbL). No third-party HD-map data is redistributed. Regenerate with `npx tsx scripts/synthesize-lanelet.ts`.
 
 ## License
 
