@@ -1,7 +1,10 @@
-// Deterministic seeded scoring for synthetic readiness tiles.
-// All randomness is keyed on `<city>:<tile_id>` so reloads are stable.
+// Deterministic seeded scoring for synthetic readiness tiles, plus the real
+// flag-driven scoring path used by the triage page. The synthetic metrics
+// remain as supporting context for tiles that have zero validator flags.
 
 import type { Feature, FeatureCollection, Polygon } from "geojson";
+import type { Flag, Severity } from "./validators";
+import { SEVERITY_WEIGHT } from "./validators";
 
 export type CityId = "sf" | "mv";
 
@@ -50,7 +53,7 @@ export interface TileProperties {
   stop_sign_confidence: number;
   readiness_score: number;
   last_validated_at: string;
-  // For MapLibre data-driven styling — numeric bucket: 0=red,1=yellow,2=green
+  // For MapLibre data-driven styling - numeric bucket: 0=red,1=yellow,2=green
   bucket: number;
 }
 
@@ -98,7 +101,7 @@ function bucketOf(score: number): number {
 const MAX_AXIS = 60; // cap at 60x60 = 3600 tiles
 
 /**
- * Build a synthetic ~100–500m tile grid over a city's bbox.
+ * Build a synthetic ~100-500m tile grid over a city's bbox.
  * Caps at MAX_AXIS x MAX_AXIS to stay performant.
  */
 export function generateTiles(cityId: CityId): TileCollection {
@@ -106,7 +109,6 @@ export function generateTiles(cityId: CityId): TileCollection {
   const latSpan = city.north - city.south;
   const lngSpan = city.east - city.west;
 
-  // ~100m at city latitude.
   const latStep0 = 0.0009;
   const lngStep0 = 0.00114;
 
@@ -120,7 +122,7 @@ export function generateTiles(cityId: CityId): TileCollection {
   const lngStep = lngSpan / cols;
 
   const features: TileFeature[] = [];
-  // Pin to a deterministic reference time so SSR/client outputs match (no hydration drift).
+  // Pin to a deterministic reference time so SSR/client outputs match.
   const now = Date.UTC(2026, 4, 28, 14, 0, 0);
 
   for (let r = 0; r < rows; r++) {
@@ -135,7 +137,6 @@ export function generateTiles(cityId: CityId): TileCollection {
       const tile_id = `T-${String(r).padStart(3, "0")}-${String(c).padStart(3, "0")}`;
       const rng = mulberry32(fnv1a(`${cityId}:${tile_id}`));
 
-      // Draw metrics with a slight skew toward higher confidence.
       const lane_marking_confidence = Math.min(1, Math.max(0, 0.6 + rng() * 0.45 - 0.05));
       const sensor_divergence_score = Math.min(1, Math.max(0, rng() * 0.55));
       const stop_sign_confidence = Math.min(1, Math.max(0, 0.55 + rng() * 0.5 - 0.05));
@@ -201,4 +202,137 @@ export function tileIssues(p: TileProperties): TileIssue[] {
   if (p.stop_sign_confidence < 0.7)
     out.push({ code: "stop_low", label: "Low confidence on stop sign detections" });
   return out.slice(0, 3);
+}
+
+// --------------------------------------------------------------------------
+// Flag-driven scoring (Atlas Checks integration)
+// --------------------------------------------------------------------------
+
+// Threshold tuned empirically on the SF/MV extracts so that ~30% of tiles fall
+// below the default 0.8 cutoff and one high-severity flag alone moves a tile
+// out of the "ready" bucket. The synthetic signal remains as fallback for
+// tiles with no flags.
+const READINESS_THRESHOLD = 300;
+
+export interface FlagCounts {
+  low: number;
+  med: number;
+  high: number;
+  total: number;
+}
+
+export function countFlagsBySeverity(flags: readonly Flag[]): FlagCounts {
+  const c: FlagCounts = { low: 0, med: 0, high: 0, total: 0 };
+  for (const f of flags) {
+    const s: Severity = f.properties.severity;
+    c[s]++;
+    c.total++;
+  }
+  return c;
+}
+
+export function weightedFlagSum(flags: readonly Flag[]): number {
+  let s = 0;
+  for (const f of flags) s += SEVERITY_WEIGHT[f.properties.severity];
+  return s;
+}
+
+/**
+ * Real, flag-derived readiness score for a tile. Caller is responsible for
+ * filtering flags to those inside the tile bbox; this function is pure and
+ * does not touch the tile's synthetic metrics.
+ */
+export function tileReadiness(_tile: TileProperties, flagsInBbox: readonly Flag[]): number {
+  const sum = weightedFlagSum(flagsInBbox);
+  const score = 1 - sum / READINESS_THRESHOLD;
+  return Math.max(0, Math.min(1, score));
+}
+
+// Replace synthetic readiness with the flag-driven value, keeping the rest of
+// the displayed metrics. Tiles with no flags keep their synthetic fallback so
+// the page never goes uniformly green when validators turn up nothing.
+export function tileWithFlagScore(tile: TileFeature, flagsInBbox: readonly Flag[]): TileFeature {
+  const readiness = flagsInBbox.length === 0
+    ? tile.properties.readiness_score
+    : tileReadiness(tile.properties, flagsInBbox);
+  return {
+    ...tile,
+    properties: {
+      ...tile.properties,
+      readiness_score: readiness,
+      bucket: bucketOf(readiness),
+    },
+  };
+}
+
+export function bboxOfTile(tile: TileFeature): { west: number; south: number; east: number; north: number } {
+  const ring = tile.geometry.coordinates[0];
+  let west = Infinity;
+  let east = -Infinity;
+  let south = Infinity;
+  let north = -Infinity;
+  for (const c of ring) {
+    if (c[0] < west) west = c[0];
+    if (c[0] > east) east = c[0];
+    if (c[1] < south) south = c[1];
+    if (c[1] > north) north = c[1];
+  }
+  return { west, east, south, north };
+}
+
+export function flagCentroid(f: Flag): [number, number] | null {
+  const g = f.geometry;
+  if (!g) return null;
+  if (g.type === "Point") return [g.coordinates[0], g.coordinates[1]];
+  if (g.type === "LineString" && g.coordinates.length > 0) {
+    let sx = 0;
+    let sy = 0;
+    for (const c of g.coordinates) {
+      sx += c[0];
+      sy += c[1];
+    }
+    return [sx / g.coordinates.length, sy / g.coordinates.length];
+  }
+  return null;
+}
+
+/**
+ * Bucket flags by the tile they fall inside. Tiles form a uniform grid so we
+ * compute each flag's cell directly rather than scanning every tile.
+ */
+export function indexFlagsByTile(
+  tiles: TileCollection,
+  flags: readonly Flag[],
+): Map<string, Flag[]> {
+  const out = new Map<string, Flag[]>();
+  if (tiles.features.length === 0) return out;
+  const first = bboxOfTile(tiles.features[0]);
+  const stepLng = first.east - first.west;
+  const stepLat = first.north - first.south;
+  let originLng = Infinity;
+  let originLat = Infinity;
+  for (const t of tiles.features) {
+    const b = bboxOfTile(t);
+    if (b.west < originLng) originLng = b.west;
+    if (b.south < originLat) originLat = b.south;
+  }
+  const byCell = new Map<string, string>();
+  for (const t of tiles.features) {
+    const b = bboxOfTile(t);
+    const cx = Math.round((b.west - originLng) / stepLng);
+    const cy = Math.round((b.south - originLat) / stepLat);
+    byCell.set(`${cx},${cy}`, t.properties.tile_id);
+  }
+  for (const f of flags) {
+    const p = flagCentroid(f);
+    if (!p) continue;
+    const cx = Math.floor((p[0] - originLng) / stepLng);
+    const cy = Math.floor((p[1] - originLat) / stepLat);
+    const tid = byCell.get(`${cx},${cy}`);
+    if (!tid) continue;
+    const arr = out.get(tid);
+    if (arr) arr.push(f);
+    else out.set(tid, [f]);
+  }
+  return out;
 }
