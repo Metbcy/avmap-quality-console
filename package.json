@@ -7,7 +7,9 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "fetch-data": "tsx scripts/fetch-osm.ts"
+    "fetch-data": "tsx scripts/fetch-osm.ts",
+    "compute-flags": "tsx scripts/compute-flags.ts",
+    "test": "vitest run"
   },
   "dependencies": {
     "next": "16.2.6",
@@ -26,6 +28,7 @@
     "postcss": "^8.4.49",
     "tailwindcss": "^3.4.17",
     "tsx": "^4.19.2",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^4.1.7"
   }
 }

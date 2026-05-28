@@ -1,14 +1,21 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useRef } from "react";
 import maplibregl from "maplibre-gl";
+import type { FeatureCollection } from "geojson";
 import { CITIES, type CityId, type TileCollection, type TileFeature } from "@/lib/scoring";
+import type { Flag } from "@/lib/validators";
+
+export interface MapViewHandle {
+  flyTo: (lng: number, lat: number, zoom?: number) => void;
+}
 
 interface MapViewProps {
   city: CityId;
   tiles: TileCollection;
   threshold: number;
   showOnlyFlagged: boolean;
+  flags: Flag[];
   onTileClick: (tile: TileFeature) => void;
 }
 
@@ -22,21 +29,17 @@ const BASEMAP_STYLE: maplibregl.StyleSpecification = {
       attribution: "© OpenStreetMap contributors © CARTO",
     },
   },
-  layers: [
-    { id: "carto-dark", type: "raster", source: "carto-dark" },
-  ],
+  layers: [{ id: "carto-dark", type: "raster", source: "carto-dark" }],
 };
 
 const TILE_SOURCE = "tiles";
 const ROADS_SOURCE = "roads";
+const FLAGS_SOURCE = "flags";
 
-export default function MapView({
-  city,
-  tiles,
-  threshold,
-  showOnlyFlagged,
-  onTileClick,
-}: MapViewProps) {
+const MapView = forwardRef<MapViewHandle, MapViewProps>(function MapView(
+  { city, tiles, threshold, showOnlyFlagged, flags, onTileClick },
+  ref,
+) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const onTileClickRef = useRef(onTileClick);
@@ -44,7 +47,14 @@ export default function MapView({
     onTileClickRef.current = onTileClick;
   }, [onTileClick]);
 
-  // Init map once
+  useImperativeHandle(ref, () => ({
+    flyTo: (lng, lat, zoom) => {
+      const map = mapRef.current;
+      if (!map) return;
+      map.flyTo({ center: [lng, lat], zoom: zoom ?? Math.max(map.getZoom(), 16), duration: 600 });
+    },
+  }));
+
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
     const c = CITIES[city];
@@ -58,41 +68,29 @@ export default function MapView({
     mapRef.current = map;
 
     map.on("load", () => {
-      map.addSource(ROADS_SOURCE, {
-        type: "geojson",
-        data: { type: "FeatureCollection", features: [] },
-      });
+      map.addSource(ROADS_SOURCE, { type: "geojson", data: { type: "FeatureCollection", features: [] } });
       map.addLayer({
         id: "roads-line",
         type: "line",
         source: ROADS_SOURCE,
-        paint: {
-          "line-color": "#818cf8",
-          "line-width": 1.2,
-          "line-opacity": 0.55,
-        },
+        paint: { "line-color": "#818cf8", "line-width": 1.2, "line-opacity": 0.55 },
       });
 
-      map.addSource(TILE_SOURCE, {
-        type: "geojson",
-        data: { type: "FeatureCollection", features: [] },
-      });
+      map.addSource(TILE_SOURCE, { type: "geojson", data: { type: "FeatureCollection", features: [] } });
       map.addLayer({
         id: "tiles-fill",
         type: "fill",
         source: TILE_SOURCE,
         paint: {
           "fill-color": [
-            "match",
-            ["get", "bucket"],
+            "match", ["get", "bucket"],
             2, "#22c55e",
             1, "#eab308",
             0, "#ef4444",
             "#888888",
           ],
           "fill-opacity": [
-            "match",
-            ["get", "bucket"],
+            "match", ["get", "bucket"],
             2, 0.25,
             1, 0.3,
             0, 0.4,
@@ -104,10 +102,28 @@ export default function MapView({
         id: "tiles-line",
         type: "line",
         source: TILE_SOURCE,
+        paint: { "line-color": "#ffffff", "line-width": 0.5, "line-opacity": 0.06 },
+      });
+
+      map.addSource(FLAGS_SOURCE, { type: "geojson", data: { type: "FeatureCollection", features: [] } });
+      map.addLayer({
+        id: "flags-circle",
+        type: "circle",
+        source: FLAGS_SOURCE,
+        // Hidden at low zoom: tens of thousands of points would crush MapLibre.
+        minzoom: 14,
         paint: {
-          "line-color": "#ffffff",
-          "line-width": 0.5,
-          "line-opacity": 0.06,
+          "circle-radius": ["interpolate", ["linear"], ["zoom"], 14, 2, 18, 5],
+          "circle-color": [
+            "match", ["get", "severity"],
+            "high", "#ef4444",
+            "med", "#eab308",
+            "low", "#34d399",
+            "#94a3b8",
+          ],
+          "circle-stroke-color": "#0a0a0a",
+          "circle-stroke-width": 0.5,
+          "circle-opacity": 0.85,
         },
       });
 
@@ -116,26 +132,17 @@ export default function MapView({
         if (!f) return;
         onTileClickRef.current(f as unknown as TileFeature);
       });
-      map.on("mouseenter", "tiles-fill", () => {
-        map.getCanvas().style.cursor = "pointer";
-      });
-      map.on("mouseleave", "tiles-fill", () => {
-        map.getCanvas().style.cursor = "";
-      });
+      map.on("mouseenter", "tiles-fill", () => { map.getCanvas().style.cursor = "pointer"; });
+      map.on("mouseleave", "tiles-fill", () => { map.getCanvas().style.cursor = ""; });
     });
 
-    return () => {
-      map.remove();
-      mapRef.current = null;
-    };
+    return () => { map.remove(); mapRef.current = null; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Load roads on city change
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
-
     let cancelled = false;
     const url = `/data/${city}.geojson`;
     fetch(url)
@@ -150,16 +157,11 @@ export default function MapView({
         else map.once("load", apply);
       })
       .catch(() => {});
-
     const c = CITIES[city];
     map.flyTo({ center: c.center, zoom: c.zoom, duration: 800 });
-
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, [city]);
 
-  // Update tiles data
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
@@ -171,7 +173,19 @@ export default function MapView({
     else map.once("load", apply);
   }, [tiles]);
 
-  // Update filter (show-only-flagged)
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    const apply = () => {
+      const src = map.getSource(FLAGS_SOURCE) as maplibregl.GeoJSONSource | undefined;
+      if (!src) return;
+      const fc: FeatureCollection = { type: "FeatureCollection", features: flags };
+      src.setData(fc);
+    };
+    if (map.isStyleLoaded()) apply();
+    else map.once("load", apply);
+  }, [flags]);
+
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
@@ -187,4 +201,6 @@ export default function MapView({
   }, [threshold, showOnlyFlagged]);
 
   return <div ref={containerRef} className="absolute inset-0" />;
-}
+});
+
+export default MapView;
