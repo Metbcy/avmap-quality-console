@@ -5,7 +5,6 @@ import maplibregl from "maplibre-gl";
 import type { FeatureCollection } from "geojson";
 import { CITIES, type CityId, type TileCollection, type TileFeature } from "@/lib/scoring";
 import type { Flag } from "@/lib/validators";
-import { asset } from "@/lib/asset";
 
 export interface MapViewHandle {
   flyTo: (lng: number, lat: number, zoom?: number) => void;
@@ -17,6 +16,8 @@ interface MapViewProps {
   threshold: number;
   showOnlyFlagged: boolean;
   flags: Flag[];
+  roads: FeatureCollection | null;
+  sourceLabel: string;
   onTileClick: (tile: TileFeature) => void;
 }
 
@@ -43,7 +44,7 @@ const FLAGS_SOURCE = "flags";
 // bbox into the SVG viewport. Not pannable , intentional, this is for static
 // captures and visual regression, not interactive use.
 function NoGlMapView({
-  city, tiles, threshold, showOnlyFlagged, flags, onTileClick,
+  city, tiles, threshold, showOnlyFlagged, flags, sourceLabel, onTileClick,
 }: MapViewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ w: 1200, h: 800 });
@@ -155,7 +156,7 @@ function NoGlMapView({
           />
         ))}
         <text x={12} y={size.h - 10} fill="#6b7280" fontSize="10" fontFamily="monospace">
-          {c.label} · {tilePolys.length} tiles · {flagDots.length} flag samples · static render
+          {c.label} · {sourceLabel} · {tilePolys.length} tiles · {flagDots.length} flag samples · static render
         </text>
       </svg>
     </div>
@@ -163,7 +164,7 @@ function NoGlMapView({
 }
 
 const MapView = forwardRef<MapViewHandle, MapViewProps>(function MapView(props, ref) {
-  const { city, tiles, threshold, showOnlyFlagged, flags, onTileClick } = props;
+  const { city, tiles, threshold, showOnlyFlagged, flags, roads, onTileClick } = props;
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const onTileClickRef = useRef(onTileClick);
@@ -275,23 +276,20 @@ const MapView = forwardRef<MapViewHandle, MapViewProps>(function MapView(props, 
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
-    let cancelled = false;
-    const url = asset(`/data/${city}.geojson`);
-    fetch(url)
-      .then((r) => r.json())
-      .then((data) => {
-        if (cancelled) return;
-        const apply = () => {
-          const src = map.getSource(ROADS_SOURCE) as maplibregl.GeoJSONSource | undefined;
-          if (src) src.setData(data);
-        };
-        if (map.isStyleLoaded()) apply();
-        else map.once("load", apply);
-      })
-      .catch(() => {});
+    const data: FeatureCollection = roads ?? { type: "FeatureCollection", features: [] };
+    const apply = () => {
+      const src = map.getSource(ROADS_SOURCE) as maplibregl.GeoJSONSource | undefined;
+      if (src) src.setData(data);
+    };
+    if (map.isStyleLoaded()) apply();
+    else map.once("load", apply);
+  }, [roads]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
     const c = CITIES[city];
     map.flyTo({ center: c.center, zoom: c.zoom, duration: 800 });
-    return () => { cancelled = true; };
   }, [city]);
 
   useEffect(() => {

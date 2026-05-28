@@ -19,8 +19,10 @@ import {
   type TileProperties,
 } from "@/lib/scoring";
 import type { Flag, Severity } from "@/lib/validators";
-import { RULES } from "@/lib/validators";
+import { RULES, runValidators } from "@/lib/validators";
 import RuleLegend from "@/components/RuleLegend";
+import TileSignals from "@/components/TileSignals";
+import { rollupTagsForTile } from "@/lib/osm/tag-rollup";
 import type { MapViewHandle } from "@/components/MapView";
 
 const MapView = dynamic(() => import("@/components/MapView"), { ssr: false });
@@ -35,19 +37,49 @@ const SEVERITY_DOT_CLASS: Record<Severity, string> = {
   high: "bg-red-500",
 };
 
+export type DataSource = "osm" | "overture";
+
+const SOURCE_LABEL: Record<DataSource, string> = {
+  osm: "OSM",
+  overture: "Overture",
+};
+
+// Overture transportation extract is only synthesised for SF in this build.
+// Falling back to OSM for any city that has no Overture file keeps the toggle
+// non-destructive (see Sidebar where the Overture pill is disabled).
+const OVERTURE_AVAILABLE: Partial<Record<CityId, boolean>> = { sf: true };
+
+function roadsUrl(city: CityId, source: DataSource): string {
+  if (source === "overture" && OVERTURE_AVAILABLE[city]) {
+    return asset(`/data/${city}_overture.geojson`);
+  }
+  return asset(`/data/${city}.geojson`);
+}
+
 export default function TriagePage() {
   const [city, setCity] = useState<CityId>("sf");
+  const [dataSource, setDataSource] = useState<DataSource>("osm");
   const [threshold, setThreshold] = useState(0.8);
   const [showOnlyFlagged, setShowOnlyFlagged] = useState(false);
   const [selected, setSelected] = useState<TileProperties | null>(null);
   const [queued, setQueued] = useState<Record<string, boolean>>({});
   const [flagsByCity, setFlagsByCity] = useState<Record<CityId, Flag[]>>({ sf: [], mv: [] });
+  const [roads, setRoads] = useState<FeatureCollection | null>(null);
+  const [overtureFlags, setOvertureFlags] = useState<Flag[]>([]);
   const mapRef = useRef<MapViewHandle>(null);
+
+  // Effective source: gracefully fall back to OSM when Overture is unavailable
+  // for the selected city.
+  const effectiveSource: DataSource =
+    dataSource === "overture" && OVERTURE_AVAILABLE[city] ? "overture" : "osm";
 
   // Load precomputed flags per city, lazily. Falls back to an empty array if
   // the file is missing - tile scoring then uses the synthetic signal.
   useEffect(() => {
-    if (flagsByCity[city].length > 0) return;
+    // Skip if we've already attempted a fetch for this city (the key exists
+    // even when the resulting array is empty; checking .length re-fetches
+    // forever on cities with zero precomputed flags).
+    if (city in flagsByCity) return;
     let cancelled = false;
     fetch(asset(`/data/${city}.flags.json`))
       .then((r) => (r.ok ? r.json() : { type: "FeatureCollection", features: [] }))
@@ -55,12 +87,46 @@ export default function TriagePage() {
         if (cancelled) return;
         setFlagsByCity((prev) => ({ ...prev, [city]: data.features as Flag[] }));
       })
-      .catch(() => {});
+      .catch(() => {
+        if (cancelled) return;
+        // Record empty result so we don't retry on every render.
+        setFlagsByCity((prev) => ({ ...prev, [city]: [] }));
+      });
     return () => { cancelled = true; };
   }, [city, flagsByCity]);
 
+  // Load roads for the current (city, source). Roads feed the basemap line
+  // layer, the OSM tag rollup, and (for Overture) the in-browser validator
+  // pass that produces the flag set used by scoring. We never pre-clear the
+  // existing roads here - the request token below discards stale responses,
+  // and avoiding the pre-clear keeps the effect free of cascading renders.
+  useEffect(() => {
+    let cancelled = false;
+    fetch(roadsUrl(city, effectiveSource))
+      .then((r) => (r.ok ? r.json() : { type: "FeatureCollection", features: [] }))
+      .then((data: FeatureCollection) => {
+        if (cancelled) return;
+        setRoads(data);
+        if (effectiveSource === "overture") {
+          // ~500 ways: cheap enough to validate in-browser. Same rules, same
+          // severity weights -> readiness numbers are directly comparable
+          // across OSM and Overture.
+          const flags = runValidators(data.features) as Flag[];
+          setOvertureFlags(flags);
+        } else {
+          setOvertureFlags([]);
+        }
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setRoads({ type: "FeatureCollection", features: [] });
+        setOvertureFlags([]);
+      });
+    return () => { cancelled = true; };
+  }, [city, effectiveSource]);
+
   const baseTiles = useMemo(() => generateTiles(city), [city]);
-  const flags = flagsByCity[city];
+  const flags = effectiveSource === "overture" ? overtureFlags : flagsByCity[city];
 
   // Bucket flags into tiles once per (city, flags) change so the per-tile
   // detail and badge lookups are O(1).
@@ -92,6 +158,14 @@ export default function TriagePage() {
   const queueKey = selected ? `${selected.city}:${selected.tile_id}` : "";
   const isQueued = queueKey && queued[queueKey];
   const selectedFlags = selected ? flagsByTile.get(selected.tile_id) ?? [] : [];
+  const selectedTileFeature = useMemo(() => {
+    if (!selected) return null;
+    return tiles.features.find((t) => t.properties.tile_id === selected.tile_id) ?? null;
+  }, [selected, tiles]);
+  const selectedRollup = useMemo(() => {
+    if (!selectedTileFeature) return null;
+    return rollupTagsForTile(selectedTileFeature, roads);
+  }, [selectedTileFeature, roads]);
 
   return (
     <div className="flex h-screen flex-col bg-gray-950 text-gray-100">
@@ -100,6 +174,9 @@ export default function TriagePage() {
         <Sidebar
           city={city}
           setCity={(c) => { setCity(c); setSelected(null); }}
+          dataSource={dataSource}
+          setDataSource={(s) => { setDataSource(s); setSelected(null); }}
+          overtureAvailable={!!OVERTURE_AVAILABLE[city]}
           threshold={threshold}
           setThreshold={setThreshold}
           showOnlyFlagged={showOnlyFlagged}
@@ -114,6 +191,8 @@ export default function TriagePage() {
             threshold={threshold}
             showOnlyFlagged={showOnlyFlagged}
             flags={flags}
+            roads={roads}
+            sourceLabel={SOURCE_LABEL[effectiveSource]}
             onTileClick={handleTileClick}
           />
           <RuleLegend />
@@ -121,6 +200,8 @@ export default function TriagePage() {
         <DetailPanel
           selected={selected}
           selectedFlags={selectedFlags}
+          rollup={selectedRollup}
+          sourceLabel={SOURCE_LABEL[effectiveSource]}
           isQueued={!!isQueued}
           onQueue={() => { if (queueKey) setQueued((q) => ({ ...q, [queueKey]: true })); }}
           onFlyToFlag={(f) => {
@@ -174,15 +255,50 @@ function TopBar({ active }: { active: "triage" | "diff" | "lanelet" }) {
 function Sidebar(props: {
   city: CityId;
   setCity: (c: CityId) => void;
+  dataSource: DataSource;
+  setDataSource: (s: DataSource) => void;
+  overtureAvailable: boolean;
   threshold: number;
   setThreshold: (n: number) => void;
   showOnlyFlagged: boolean;
   setShowOnlyFlagged: (b: boolean) => void;
   flagCount: number;
 }) {
-  const { city, setCity, threshold, setThreshold, showOnlyFlagged, setShowOnlyFlagged, flagCount } = props;
+  const {
+    city, setCity, dataSource, setDataSource, overtureAvailable,
+    threshold, setThreshold, showOnlyFlagged, setShowOnlyFlagged, flagCount,
+  } = props;
   return (
     <aside className="flex w-80 shrink-0 flex-col gap-5 border-r border-gray-800 bg-gray-950 px-4 py-4">
+      <Section title="Data source">
+        <div className="flex gap-1 rounded border border-gray-800 bg-gray-900 p-0.5">
+          <DataSourcePill
+            label="OSM"
+            active={dataSource === "osm"}
+            onClick={() => setDataSource("osm")}
+            disabled={false}
+          />
+          <DataSourcePill
+            label="Overture"
+            active={dataSource === "overture"}
+            onClick={() => setDataSource("overture")}
+            disabled={!overtureAvailable}
+            title={overtureAvailable ? undefined : "Overture extract not available for this city"}
+          />
+        </div>
+        {!overtureAvailable && dataSource === "overture" && (
+          <div className="mt-1 text-[10px] text-gray-500">
+            Falling back to OSM for this city.
+          </div>
+        )}
+        {overtureAvailable && dataSource === "overture" && (
+          <div className="mt-1 rounded border border-amber-900/60 bg-amber-950/40 px-2 py-1 text-[10px] leading-snug text-amber-200">
+            <span className="font-semibold uppercase tracking-wide">Synthesized</span>
+            {" "}Overture stub: 500 ways perturbed from local OSM with 26 intentional divergences. A real Overture pull requires S3/DuckDB at build time.
+          </div>
+        )}
+      </Section>
+
       <Section title="City">
         <div className="grid grid-cols-2 gap-1.5">
           {(Object.keys(CITIES) as CityId[]).map((id) => {
@@ -242,6 +358,28 @@ function Sidebar(props: {
   );
 }
 
+function DataSourcePill({
+  label, active, onClick, disabled, title,
+}: {
+  label: string;
+  active: boolean;
+  onClick: () => void;
+  disabled?: boolean;
+  title?: string;
+}) {
+  const base = "flex-1 rounded px-2 py-1 text-xs transition";
+  const cls = disabled
+    ? `${base} cursor-not-allowed text-gray-600`
+    : active
+      ? `${base} border border-indigo-500 bg-indigo-500/10 text-indigo-200`
+      : `${base} border border-transparent text-gray-400 hover:text-gray-200`;
+  return (
+    <button onClick={disabled ? undefined : onClick} disabled={disabled} className={cls} title={title}>
+      {label}
+    </button>
+  );
+}
+
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div>
@@ -252,10 +390,12 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 }
 
 function DetailPanel({
-  selected, selectedFlags, isQueued, onQueue, onFlyToFlag,
+  selected, selectedFlags, rollup, sourceLabel, isQueued, onQueue, onFlyToFlag,
 }: {
   selected: TileProperties | null;
   selectedFlags: Flag[];
+  rollup: import("@/lib/osm/tag-rollup").TileTagRollup | null;
+  sourceLabel: string;
   isQueued: boolean;
   onQueue: () => void;
   onFlyToFlag: (f: Flag) => void;
@@ -265,7 +405,15 @@ function DetailPanel({
       {!selected ? (
         <div className="text-xs text-gray-500">Select a tile on the map to inspect its readiness signals.</div>
       ) : (
-        <SelectedDetail tile={selected} flags={selectedFlags} isQueued={isQueued} onQueue={onQueue} onFlyToFlag={onFlyToFlag} />
+        <SelectedDetail
+          tile={selected}
+          flags={selectedFlags}
+          rollup={rollup}
+          sourceLabel={sourceLabel}
+          isQueued={isQueued}
+          onQueue={onQueue}
+          onFlyToFlag={onFlyToFlag}
+        />
       )}
     </aside>
   );
@@ -284,10 +432,12 @@ function FlagBadgeRow({ flags }: { flags: Flag[] }) {
 }
 
 function SelectedDetail({
-  tile, flags, isQueued, onQueue, onFlyToFlag,
+  tile, flags, rollup, sourceLabel, isQueued, onQueue, onFlyToFlag,
 }: {
   tile: TileProperties;
   flags: Flag[];
+  rollup: import("@/lib/osm/tag-rollup").TileTagRollup | null;
+  sourceLabel: string;
   isQueued: boolean;
   onQueue: () => void;
   onFlyToFlag: (f: Flag) => void;
@@ -303,6 +453,8 @@ function SelectedDetail({
         </div>
         <div className="mt-2"><FlagBadgeRow flags={flags} /></div>
       </div>
+
+      {rollup && <TileSignals rollup={rollup} sourceLabel={sourceLabel} />}
 
       <div>
         <div className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-gray-500">Score breakdown</div>
