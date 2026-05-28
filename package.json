@@ -7,13 +7,14 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "fetch-data": "tsx scripts/fetch-osm.ts"
+    "fetch-data": "tsx scripts/fetch-osm.ts",
+    "test": "vitest run"
   },
   "dependencies": {
+    "maplibre-gl": "^4.7.1",
     "next": "16.2.6",
     "react": "19.2.4",
-    "react-dom": "19.2.4",
-    "maplibre-gl": "^4.7.1"
+    "react-dom": "19.2.4"
   },
   "devDependencies": {
     "@types/geojson": "^7946.0.14",
@@ -26,6 +27,7 @@
     "postcss": "^8.4.49",
     "tailwindcss": "^3.4.17",
     "tsx": "^4.19.2",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^4.1.7"
   }
 }

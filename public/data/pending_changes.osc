@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<osmChange version="0.6" generator="avmap-demo">
+  <create>
+    <node id="-1" lon="-122.4170" lat="37.7995"/>
+    <node id="-2" lon="-122.4172" lat="37.8000"/>
+    <way id="-1">
+      <nd ref="-1"/>
+      <nd ref="-2"/>
+      <tag k="highway" v="residential"/>
+      <tag k="name" v="New Service Alley"/>
+    </way>
+    <node id="-3" lon="-122.4200" lat="37.7820">
+      <tag k="highway" v="stop"/>
+      <tag k="direction" v="forward"/>
+    </node>
+  </create>
+  <modify>
+    <way id="5004035" version="2">
+      <nd ref="378727"/>
+      <nd ref="378728"/>
+      <tag k="highway" v="residential"/>
+      <tag k="name" v="Macondray Lane"/>
+      <tag k="maxspeed" v="25 mph"/>
+    </way>
+    <node id="33241803" version="4" lon="-122.4034504" lat="37.8050417">
+      <tag k="highway" v="traffic_signals"/>
+      <tag k="traffic_signals" v="pedestrian"/>
+    </node>
+  </modify>
+  <delete>
+    <node id="65279896" version="1"/>
+  </delete>
+</osmChange>
