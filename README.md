@@ -1,36 +1,58 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# AV Map Quality & Diff Console
 
-## Getting Started
+An independent open-source prototype exploring tooling for high-stakes geospatial data quality — the kind of internal console an ops team might use to triage HD-map tiles and review pending edits before they ship to fleet.
 
-First, run the development server:
+Built in a few hours with Next.js + MapLibre on top of real OpenStreetMap extracts. All scores and diffs are synthetic, generated locally from a deterministic seeded PRNG so the views are reproducible without a backend.
+
+![Triage overview](screenshots/triage-overview.png)
+
+## What's in here
+
+Two views, both server-rendered with client-side map interactivity:
+
+**Triage** (`/`) — a tile grid over San Francisco or Mountain View, colored by a deterministic readiness score (`lane_marking_confidence`, `sensor_divergence_score`, `stop_sign_confidence`, `construction_flag`). Adjust the threshold, filter to only flagged tiles, click any tile for a per-signal breakdown.
+
+**Diff** (`/diff`) — side-by-side baseline-vs-candidate map view with a queue of pending changes (new lane, moved crosswalk, removed stop sign, blocker construction). Approve or reject inline with a comment.
+
+## Stack
+
+- Next.js 16 App Router, TypeScript strict
+- Tailwind v3, dark theme
+- MapLibre GL (no API key — Carto's free dark basemap)
+- Real OSM highway extracts for SF and MV bboxes, fetched via Overpass and committed under `public/data/`
+- Playwright for headless screenshot capture
+
+## Run it
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install
+npm run build
+npm start                     # http://localhost:3000
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Regenerate the OSM extracts:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```bash
+npm run fetch-data            # writes public/data/{sf,mv}.geojson
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Capture screenshots (requires a display — use `xvfb-run` on a headless box for WebGL):
 
-## Learn More
+```bash
+xvfb-run -a -s "-screen 0 1440x900x24" node scripts/screenshots.mjs
+```
 
-To learn more about Next.js, take a look at the following resources:
+## Screenshots
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+| | |
+|---|---|
+| ![Triage filtered](screenshots/triage-filtered.png) | ![Tile detail](screenshots/triage-tile-detail.png) |
+| ![Mountain View](screenshots/mv-overview.png) | ![Diff overview](screenshots/diff-overview.png) |
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Data & attribution
 
-## Deploy on Vercel
+Road network © OpenStreetMap contributors, ODbL. Basemap © CARTO. All readiness scores and pending diffs are synthetic, generated locally with a seeded PRNG (`mulberry32` + `fnv1a`) — no real fleet data, no proprietary signals.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## License
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+MIT.

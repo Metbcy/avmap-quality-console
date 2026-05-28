@@ -120,7 +120,8 @@ export function generateTiles(cityId: CityId): TileCollection {
   const lngStep = lngSpan / cols;
 
   const features: TileFeature[] = [];
-  const now = Date.now();
+  // Pin to a deterministic reference time so SSR/client outputs match (no hydration drift).
+  const now = Date.UTC(2026, 4, 28, 14, 0, 0);
 
   for (let r = 0; r < rows; r++) {
     for (let c = 0; c < cols; c++) {
