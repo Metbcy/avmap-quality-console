@@ -67,6 +67,11 @@ export default function TriagePage() {
   const [flagsByCity, setFlagsByCity] = useState<Record<CityId, Flag[]>>({ sf: [], mv: [] });
   const [roads, setRoads] = useState<FeatureCollection | null>(null);
   const [overtureFlags, setOvertureFlags] = useState<Flag[]>([]);
+  // Cache fetched roads keyed by `${city}:${source}` so toggling source or
+  // bouncing between cities is instant after the first fetch. Same cache for
+  // Overture-derived flags so we don't re-run the validator pass either.
+  const roadsCacheRef = useRef<Map<string, FeatureCollection>>(new Map());
+  const overtureFlagsCacheRef = useRef<Map<string, Flag[]>>(new Map());
   const mapRef = useRef<MapViewHandle>(null);
 
   // Effective source: gracefully fall back to OSM when Overture is unavailable
@@ -102,17 +107,31 @@ export default function TriagePage() {
   // existing roads here - the request token below discards stale responses,
   // and avoiding the pre-clear keeps the effect free of cascading renders.
   useEffect(() => {
+    const key = `${city}:${effectiveSource}`;
+    // Cache hit: swap state synchronously, no network, no validator pass.
+    const cachedRoads = roadsCacheRef.current.get(key);
+    if (cachedRoads) {
+      setRoads(cachedRoads);
+      setOvertureFlags(
+        effectiveSource === "overture"
+          ? overtureFlagsCacheRef.current.get(key) ?? []
+          : [],
+      );
+      return;
+    }
     let cancelled = false;
     fetch(roadsUrl(city, effectiveSource))
       .then((r) => (r.ok ? r.json() : { type: "FeatureCollection", features: [] }))
       .then((data: FeatureCollection) => {
         if (cancelled) return;
+        roadsCacheRef.current.set(key, data);
         setRoads(data);
         if (effectiveSource === "overture") {
           // ~500 ways: cheap enough to validate in-browser. Same rules, same
           // severity weights -> readiness numbers are directly comparable
           // across OSM and Overture.
           const flags = runValidators(data.features) as Flag[];
+          overtureFlagsCacheRef.current.set(key, flags);
           setOvertureFlags(flags);
         } else {
           setOvertureFlags([]);
@@ -124,6 +143,29 @@ export default function TriagePage() {
         setOvertureFlags([]);
       });
     return () => { cancelled = true; };
+  }, [city, effectiveSource]);
+
+  // Warm the cache for the OTHER source so the first toggle is also instant.
+  // Runs idle, not on the critical path; same key shape as the main effect.
+  useEffect(() => {
+    if (!OVERTURE_AVAILABLE[city]) return;
+    const other: DataSource = effectiveSource === "osm" ? "overture" : "osm";
+    const key = `${city}:${other}`;
+    if (roadsCacheRef.current.has(key)) return;
+    const run = () => {
+      fetch(roadsUrl(city, other))
+        .then((r) => (r.ok ? r.json() : { type: "FeatureCollection", features: [] }))
+        .then((data: FeatureCollection) => {
+          roadsCacheRef.current.set(key, data);
+          if (other === "overture") {
+            overtureFlagsCacheRef.current.set(key, runValidators(data.features) as Flag[]);
+          }
+        })
+        .catch(() => { /* prefetch failure is silent */ });
+    };
+    const w = window as Window & { requestIdleCallback?: (cb: () => void) => number };
+    if (typeof w.requestIdleCallback === "function") w.requestIdleCallback(run);
+    else setTimeout(run, 500);
   }, [city, effectiveSource]);
 
   const baseTiles = useMemo(() => {
