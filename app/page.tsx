@@ -10,6 +10,7 @@ import {
   countFlagsBySeverity,
   flagCentroid,
   generateTiles,
+  filterTilesToRoads,
   indexFlagsByTile,
   tileIssues,
   tileWithFlagScore,
@@ -125,7 +126,14 @@ export default function TriagePage() {
     return () => { cancelled = true; };
   }, [city, effectiveSource]);
 
-  const baseTiles = useMemo(() => generateTiles(city), [city]);
+  const baseTiles = useMemo(() => {
+    const all = generateTiles(city);
+    // Trim tiles that have no road geometry, which removes open-water cells
+    // (Pacific, Bay) while keeping bridge spans because road LineStrings cross
+    // them. Only filters once roads have loaded; before that we render the
+    // full grid so the map doesn't briefly go empty on city switch.
+    return filterTilesToRoads(all, roads);
+  }, [city, roads]);
   const flags = effectiveSource === "overture" ? overtureFlags : flagsByCity[city];
 
   // Bucket flags into tiles once per (city, flags) change so the per-tile

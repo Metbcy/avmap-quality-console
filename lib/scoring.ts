@@ -186,6 +186,85 @@ export function generateTiles(cityId: CityId): TileCollection {
   return { type: "FeatureCollection", features };
 }
 
+/**
+ * Drop tiles that contain no road geometry at all. Keeps bridges (Bay Bridge,
+ * Golden Gate, San Mateo) because OSM/Overture road LineStrings cross them, so
+ * those tiles still contain road vertices. Pure-water tiles disappear because
+ * no road LineString has a vertex inside them. Falls back to all tiles if the
+ * roads feed is missing or empty so the page never goes blank.
+ */
+export function filterTilesToRoads(
+  tiles: TileCollection,
+  roads: FeatureCollection | null | undefined,
+): TileCollection {
+  if (!roads || !roads.features || roads.features.length === 0) return tiles;
+
+  // Build a coarse spatial index keyed by tile (row,col) so we don't do an
+  // O(tiles * vertices) sweep. We assume a uniform grid (which generateTiles
+  // produces) and derive step from the first tile's bbox.
+  if (tiles.features.length === 0) return tiles;
+  const first = tiles.features[0].geometry.coordinates[0];
+  // Polygon ring: [SW, SE, NE, NW, SW]
+  const [w0, s0] = first[0];
+  const [e0, n0] = first[2];
+  const lngStep = e0 - w0;
+  const latStep = n0 - s0;
+  if (lngStep <= 0 || latStep <= 0) return tiles;
+
+  // Use the bbox of the whole tile set as the grid origin.
+  let minW = Infinity, minS = Infinity;
+  for (const t of tiles.features) {
+    const ring = t.geometry.coordinates[0];
+    if (ring[0][0] < minW) minW = ring[0][0];
+    if (ring[0][1] < minS) minS = ring[0][1];
+  }
+
+  // Map (col,row) -> tile feature.
+  const tileByCell = new Map<string, TileFeature>();
+  for (const t of tiles.features) {
+    const ring = t.geometry.coordinates[0];
+    const col = Math.round((ring[0][0] - minW) / lngStep);
+    const row = Math.round((ring[0][1] - minS) / latStep);
+    tileByCell.set(`${col}:${row}`, t);
+  }
+
+  const kept = new Set<string>();
+  const stamp = (lng: number, lat: number) => {
+    const col = Math.floor((lng - minW) / lngStep);
+    const row = Math.floor((lat - minS) / latStep);
+    const key = `${col}:${row}`;
+    if (tileByCell.has(key)) kept.add(key);
+  };
+
+  for (const f of roads.features) {
+    const g = f.geometry;
+    if (!g) continue;
+    if (g.type === "LineString") {
+      for (const c of g.coordinates) stamp(c[0], c[1]);
+    } else if (g.type === "MultiLineString") {
+      for (const line of g.coordinates) for (const c of line) stamp(c[0], c[1]);
+    } else if (g.type === "Point") {
+      stamp(g.coordinates[0], g.coordinates[1]);
+    } else if (g.type === "MultiPoint") {
+      for (const c of g.coordinates) stamp(c[0], c[1]);
+    }
+  }
+
+  // Safety: if we somehow filter everything out (e.g. coordinate mismatch),
+  // fall back to the unfiltered set rather than render an empty map.
+  if (kept.size === 0) return tiles;
+
+  return {
+    type: "FeatureCollection",
+    features: tiles.features.filter((t) => {
+      const ring = t.geometry.coordinates[0];
+      const col = Math.round((ring[0][0] - minW) / lngStep);
+      const row = Math.round((ring[0][1] - minS) / latStep);
+      return kept.has(`${col}:${row}`);
+    }),
+  };
+}
+
 export interface TileIssue {
   code: string;
   label: string;
