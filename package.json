@@ -12,10 +12,10 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "maplibre-gl": "^4.7.1",
     "next": "16.2.6",
     "react": "19.2.4",
-    "react-dom": "19.2.4",
-    "maplibre-gl": "^4.7.1"
+    "react-dom": "19.2.4"
   },
   "devDependencies": {
     "@types/geojson": "^7946.0.14",
