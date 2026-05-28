@@ -6,6 +6,7 @@ import Link from "next/link";
 import { parseLanelet2Osm } from "@/lib/lanelet2/parser";
 import { buildLaneletGeoJSON, type LaneletPolygonProperties } from "@/lib/lanelet2/toGeoJSON";
 import LaneletSidebar from "./LaneletSidebar";
+import { asset } from "@/lib/asset";
 
 const LaneletMap = dynamic(() => import("./LaneletMap"), { ssr: false });
 
@@ -26,7 +27,7 @@ export default function LaneletView() {
 
   useEffect(() => {
     let cancelled = false;
-    fetch("/data/lanelet2_mapping_example.osm")
+    fetch(asset("/data/lanelet2_mapping_example.osm"))
       .then((r) => {
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
         return r.text();

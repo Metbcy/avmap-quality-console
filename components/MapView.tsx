@@ -5,6 +5,7 @@ import maplibregl from "maplibre-gl";
 import type { FeatureCollection } from "geojson";
 import { CITIES, type CityId, type TileCollection, type TileFeature } from "@/lib/scoring";
 import type { Flag } from "@/lib/validators";
+import { asset } from "@/lib/asset";
 
 export interface MapViewHandle {
   flyTo: (lng: number, lat: number, zoom?: number) => void;
@@ -275,7 +276,7 @@ const MapView = forwardRef<MapViewHandle, MapViewProps>(function MapView(props, 
     const map = mapRef.current;
     if (!map) return;
     let cancelled = false;
-    const url = `/data/${city}.geojson`;
+    const url = asset(`/data/${city}.geojson`);
     fetch(url)
       .then((r) => r.json())
       .then((data) => {

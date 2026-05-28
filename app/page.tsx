@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import type { FeatureCollection } from "geojson";
+import { asset } from "@/lib/asset";
 import {
   CITIES,
   countFlagsBySeverity,
@@ -48,7 +49,7 @@ export default function TriagePage() {
   useEffect(() => {
     if (flagsByCity[city].length > 0) return;
     let cancelled = false;
-    fetch(`/data/${city}.flags.json`)
+    fetch(asset(`/data/${city}.flags.json`))
       .then((r) => (r.ok ? r.json() : { type: "FeatureCollection", features: [] }))
       .then((data: FeatureCollection) => {
         if (cancelled) return;

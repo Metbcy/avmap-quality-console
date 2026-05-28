@@ -45,3 +45,5 @@ next-env.d.ts
 
 # Playwright browsers cache (local install)
 /.pw-browsers/
+out/
+.next/

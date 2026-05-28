@@ -9,6 +9,7 @@ import type {
   LineString,
   Point,
 } from 'geojson';
+import { asset } from '@/lib/asset';
 import { OSC_PINNED_NOW_MS, parseOsmChange } from '@/lib/osc/parser';
 import type { Edit, OsmNodeElement, OsmWayElement } from '@/lib/osc/types';
 import {
@@ -142,7 +143,7 @@ const DiffReviewer: React.FC = () => {
 
   useEffect(() => {
     let cancelled = false;
-    fetch('/data/pending_changes.osc')
+    fetch(asset('/data/pending_changes.osc'))
       .then((r) => {
         if (!r.ok) throw new Error(`failed to fetch .osc: ${r.status}`);
         return r.text();
@@ -164,7 +165,7 @@ const DiffReviewer: React.FC = () => {
 
   useEffect(() => {
     let cancelled = false;
-    fetch('/data/sf.geojson')
+    fetch(asset('/data/sf.geojson'))
       .then((r) => r.json() as Promise<FeatureCollection>)
       .then((fc) => {
         if (cancelled) return;
