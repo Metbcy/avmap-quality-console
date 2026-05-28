@@ -16,6 +16,7 @@ interface EditCardProps {
   state: ReviewState;
   isSelected: boolean;
   ageMinutes: number | null;
+  openlrPill?: string;
   onSelect: (id: string) => void;
   onTransition: (id: string, to: ReviewStatus, comment?: string) => void;
   onAssign: (id: string, assignee: Assignee) => void;
@@ -84,6 +85,7 @@ const EditCard: React.FC<EditCardProps> = ({
   state,
   isSelected,
   ageMinutes,
+  openlrPill,
   onSelect,
   onTransition,
   onAssign,
@@ -135,6 +137,17 @@ const EditCard: React.FC<EditCardProps> = ({
           age {ageLabel}
         </span>
       </div>
+
+      {openlrPill ? (
+        <div className="flex items-center gap-1.5">
+          <span className="text-[9px] font-mono uppercase tracking-wider text-indigo-500">
+            openlr
+          </span>
+          <span className="font-mono text-[10px] text-indigo-300 bg-indigo-500/10 border border-indigo-800 rounded px-1.5 py-0.5">
+            {openlrPill.slice(0, 16)}&hellip;
+          </span>
+        </div>
+      ) : null}
 
       <div className="flex border-b border-gray-800 text-[10px] font-mono uppercase tracking-wider">
         <button

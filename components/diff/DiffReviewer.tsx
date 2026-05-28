@@ -28,6 +28,10 @@ import type {
 import DiffMapPane, { type DiffMapRef } from './DiffMapPane';
 import EditCard from './EditCard';
 import AuditLogPanel from './AuditLogPanel';
+import OpenLRPanel from './OpenLRPanel';
+import { encodeLineLocation, bearingDeg, haversineMeters } from '@/lib/openlr/encode';
+import { frcFromHighway, fowFromOsm } from '@/lib/openlr/osm-mapping';
+import type { LineLocation, LocationReferencePoint } from '@/lib/openlr/types';
 
 const ACTOR = 'alice';
 const SF_CENTER: [number, number] = [-122.42, 37.78];
@@ -116,6 +120,65 @@ const ACTION_COLOR = {
   modify: '#eab308',
   delete: '#ef4444',
 } as const;
+
+function extractWayCoords(
+  edit: Edit,
+  lookup: GeometryLookup,
+  newNodeCoords: Map<string, [number, number]>,
+): [number, number][] | null {
+  const key = `${edit.element.type}/${edit.element.id}`;
+  if (edit.element.type === 'way') {
+    const w = edit.element as OsmWayElement;
+    if (edit.action === 'create' || edit.action === 'modify') {
+      const coords: [number, number][] = [];
+      for (const ref of w.nds) {
+        const c = newNodeCoords.get(ref);
+        if (c) coords.push(c);
+      }
+      if (coords.length >= 2) return coords;
+    }
+    const geom = lookup.get(key);
+    if (geom?.type === 'LineString') return geom.coordinates as [number, number][];
+  }
+  return null;
+}
+
+function lineLocationFromCoords(
+  coords: [number, number][],
+  tags: Record<string, string>,
+): LineLocation {
+  const frc = frcFromHighway(tags['highway'] ?? '');
+  const fow = fowFromOsm(tags);
+  const lrps: LocationReferencePoint[] = [];
+
+  for (let i = 0; i < coords.length; i++) {
+    const [lon, lat] = coords[i];
+    const isLast = i === coords.length - 1;
+    if (isLast) {
+      lrps.push({ lon, lat, frc, fow, bearing: 0 });
+    } else {
+      const [nlon, nlat] = coords[i + 1];
+      const bearing = bearingDeg(lon, lat, nlon, nlat);
+      const dist = haversineMeters(lon, lat, nlon, nlat);
+      lrps.push({ lon, lat, frc, fow, bearing, lfrcnp: frc, distanceToNext: dist });
+    }
+  }
+
+  // Collapse to first + last if there are more than 2 LRPs (keep it simple)
+  if (lrps.length > 2) {
+    const first = lrps[0];
+    const last = lrps[lrps.length - 1];
+    // Update last bearing: direction from second-to-last original coord to last coord
+    const prev = coords[coords.length - 2];
+    const cur = coords[coords.length - 1];
+    last.bearing = bearingDeg(prev[0], prev[1], cur[0], cur[1]);
+    // Recompute distanceToNext for first as direct haversine to last
+    first.distanceToNext = haversineMeters(first.lon, first.lat, last.lon, last.lat);
+    return { lrps: [first, last] };
+  }
+
+  return { lrps };
+}
 
 const DiffReviewer: React.FC = () => {
   const [edits, setEdits] = useState<Edit[] | null>(null);
@@ -293,6 +356,25 @@ const DiffReviewer: React.FC = () => {
     };
   }, [edits, store, ageMinutesFor]);
 
+  const openlrMap = useMemo(() => {
+    const m = new Map<string, { b64: string; loc: LineLocation }>();
+    if (!edits) return m;
+    for (const edit of edits) {
+      const coords = extractWayCoords(edit, geomLookup, newNodeCoords);
+      if (!coords || coords.length < 2) continue;
+      try {
+        const loc = lineLocationFromCoords(coords, edit.element.type === 'way'
+          ? (edit.element as OsmWayElement).tags
+          : {});
+        const b64 = encodeLineLocation(loc);
+        m.set(edit.id, { b64, loc });
+      } catch {
+        // skip if encoding fails (e.g. degenerate geometry)
+      }
+    }
+    return m;
+  }, [edits, geomLookup, newNodeCoords]);
+
   if (loadError) {
     return (
       <div className="h-screen bg-gray-950 flex items-center justify-center text-red-400 font-mono text-sm">
@@ -385,12 +467,21 @@ const DiffReviewer: React.FC = () => {
                 state={getEditState(store, edit.id)}
                 isSelected={selectedId === edit.id}
                 ageMinutes={ageMinutesFor(edit)}
+                openlrPill={openlrMap.get(edit.id)?.b64}
                 onSelect={setSelectedId}
                 onTransition={handleTransition}
                 onAssign={handleAssign}
               />
             ))}
           </div>
+          {selectedId && openlrMap.has(selectedId) ? (
+            <div className="p-3 border-t border-gray-800 shrink-0">
+              <OpenLRPanel
+                b64={openlrMap.get(selectedId)!.b64}
+                loc={openlrMap.get(selectedId)!.loc}
+              />
+            </div>
+          ) : null}
         </aside>
 
         <div className="w-[300px] shrink-0">
