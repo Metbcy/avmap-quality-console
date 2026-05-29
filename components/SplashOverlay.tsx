@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 
-export const SPLASH_STORAGE_KEY = "avmap-splash-dismissed-v1";
+export const SPLASH_STORAGE_KEY = "avmap-splash-dismissed-v2";
 
 type Tool = {
   name: string;
@@ -127,7 +127,8 @@ export default function SplashOverlay() {
           ))}
         </div>
 
-        <div className="mt-6 flex justify-end">
+        <div className="mt-6 flex items-center justify-between">
+          <span className="text-xs text-gray-500">by Amir Bredy</span>
           <button
             type="button"
             onClick={dismiss}
