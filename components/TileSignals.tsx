@@ -25,11 +25,11 @@ export default function TileSignals({ rollup, sourceLabel }: Props) {
         <span className="font-mono text-xs text-gray-200">{way_count}</span>
       </div>
 
-      <DistRow label="lanes" dist={lanes} unit="" fmt={(n) => n.toFixed(1)} />
+      <DistRow label="lanes" dist={lanes} unit="" fmt={(n) => Math.round(n).toString()} />
       <DistRow
         label="maxspeed"
         dist={maxspeed}
-        unit=" km/h"
+        unit=" mph"
         fmt={(n) => Math.round(n).toString()}
       />
 

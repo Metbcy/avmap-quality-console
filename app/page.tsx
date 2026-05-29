@@ -23,6 +23,7 @@ import type { Flag, Severity } from "@/lib/validators";
 import { RULES, runValidators } from "@/lib/validators";
 import RuleLegend from "@/components/RuleLegend";
 import TileSignals from "@/components/TileSignals";
+import ReadinessVerdict from "@/components/ReadinessVerdict";
 import { rollupTagsForTile } from "@/lib/osm/tag-rollup";
 import type { MapViewHandle } from "@/components/MapView";
 
@@ -503,6 +504,8 @@ function SelectedDetail({
         </div>
         <div className="mt-2"><FlagBadgeRow flags={flags} /></div>
       </div>
+
+      <ReadinessVerdict tile={tile} flags={flags} />
 
       {rollup && <TileSignals rollup={rollup} sourceLabel={sourceLabel} />}
 

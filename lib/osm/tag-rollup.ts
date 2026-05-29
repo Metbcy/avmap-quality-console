@@ -168,9 +168,17 @@ export function rollupTagsForTile(
     const p = (f.properties ?? {}) as Record<string, unknown>;
     if (isLineLike(f.geometry)) {
       wayCount++;
-      lanesVals.push(parseNumber(p.lanes));
-      speedVals.push(parseNumber(p.maxspeed));
-      const ow = onewayValue(p.oneway);
+      // Prefer the normalized fetcher fields (lanes_count, maxspeed_mph, oneway_bool);
+      // fall back to raw OSM tags so older data files still render something.
+      lanesVals.push(
+        typeof p.lanes_count === "number" ? p.lanes_count : parseNumber(p.lanes),
+      );
+      speedVals.push(
+        typeof p.maxspeed_mph === "number" ? p.maxspeed_mph : parseNumber(p.maxspeed),
+      );
+      const ow = p.oneway_bool != null
+        ? onewayValue(p.oneway_bool)
+        : onewayValue(p.oneway);
       if (ow !== null) {
         onewayPresent++;
         if (ow === "yes") onewayYes++;

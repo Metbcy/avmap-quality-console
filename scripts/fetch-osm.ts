@@ -118,6 +118,107 @@ async function fetchOverpass(query: string): Promise<OverpassResponse> {
   );
 }
 
+// OSM `maxspeed` values are messy strings: "35 mph", "50", "50 km/h", "RU:urban".
+// Return null when we can't confidently parse a number.
+function parseMaxspeedMph(raw: string | null | undefined): number | null {
+  if (!raw) return null;
+  const s = raw.trim().toLowerCase();
+  const m = s.match(/^(\d+(?:\.\d+)?)\s*(mph|kmh|km\/h|kph)?$/);
+  if (!m) return null;
+  const n = parseFloat(m[1]);
+  if (!Number.isFinite(n) || n <= 0) return null;
+  const unit = m[2];
+  // OSM spec: bare number = km/h. Convert to mph.
+  if (!unit || unit === "kmh" || unit === "km/h" || unit === "kph") {
+    return Math.round(n * 0.621371);
+  }
+  return Math.round(n);
+}
+
+function parseLanes(raw: string | null | undefined): number | null {
+  if (!raw) return null;
+  // "2", "2;3", "1.5" — take the first integer-ish value.
+  const m = String(raw).split(";")[0].trim().match(/^\d+(?:\.\d+)?$/);
+  if (!m) return null;
+  const n = parseFloat(m[0]);
+  return Number.isFinite(n) && n > 0 && n <= 12 ? Math.round(n) : null;
+}
+
+function defaultLanesForHighway(highway: string | null | undefined): number | null {
+  switch (highway) {
+    case "motorway": return 3;
+    case "motorway_link": return 1;
+    case "trunk": return 2;
+    case "trunk_link": return 1;
+    case "primary": return 2;
+    case "primary_link": return 1;
+    case "secondary": return 2;
+    case "secondary_link": return 1;
+    case "tertiary": return 1;
+    case "tertiary_link": return 1;
+    case "residential": return 1;
+    case "living_street": return 1;
+    case "service": return 1;
+    case "unclassified": return 1;
+    default: return null;
+  }
+}
+
+function parseOneway(raw: string | null | undefined): "yes" | "no" | null {
+  if (raw == null) return null;
+  const s = String(raw).toLowerCase().trim();
+  if (s === "yes" || s === "true" || s === "1" || s === "-1") return "yes";
+  if (s === "no" || s === "false" || s === "0") return "no";
+  return null;
+}
+
+// Motorways and link ramps are oneway by OSM convention even when untagged.
+// Everything else defaults to "no" — best-effort, flagged as derived.
+function defaultOnewayForHighway(highway: string | null | undefined): "yes" | "no" | null {
+  switch (highway) {
+    case "motorway":
+    case "motorway_link":
+    case "trunk_link":
+    case "primary_link":
+    case "secondary_link":
+    case "tertiary_link":
+      return "yes";
+    case "trunk":
+    case "primary":
+    case "secondary":
+    case "tertiary":
+    case "residential":
+    case "living_street":
+    case "service":
+    case "unclassified":
+      return "no";
+    default:
+      return null;
+  }
+}
+
+// Best-effort defaults when the way has no maxspeed tag. Conservative US urban
+// assumptions; flagged downstream as "derived" so it's never mistaken for ground truth.
+function defaultMphForHighway(highway: string | null | undefined): number | null {
+  switch (highway) {
+    case "motorway": return 65;
+    case "motorway_link": return 45;
+    case "trunk": return 55;
+    case "trunk_link": return 35;
+    case "primary": return 35;
+    case "primary_link": return 25;
+    case "secondary": return 30;
+    case "secondary_link": return 25;
+    case "tertiary": return 25;
+    case "tertiary_link": return 20;
+    case "residential": return 25;
+    case "living_street": return 15;
+    case "service": return 15;
+    case "unclassified": return 25;
+    default: return null;
+  }
+}
+
 function elementsToGeoJSON(
   resp: OverpassResponse,
 ): FeatureCollection<LineString | Point> {
@@ -125,14 +226,33 @@ function elementsToGeoJSON(
   for (const el of resp.elements) {
     if (el.type === "way" && el.geometry && el.geometry.length >= 2) {
       const coords: Position[] = el.geometry.map((g) => [g.lon, g.lat]);
+      const highway = el.tags?.highway ?? null;
+      const rawMaxspeed = el.tags?.maxspeed ?? null;
+      const parsedMph = parseMaxspeedMph(rawMaxspeed);
+      const maxspeedMph = parsedMph ?? defaultMphForHighway(highway);
+
+      const rawLanes = el.tags?.lanes ?? null;
+      const parsedLanes = parseLanes(rawLanes);
+      const lanesCount = parsedLanes ?? defaultLanesForHighway(highway);
+
+      const rawOneway = el.tags?.oneway ?? null;
+      const parsedOneway = parseOneway(rawOneway);
+      const onewayVal = parsedOneway ?? defaultOnewayForHighway(highway);
+
       features.push({
         type: "Feature",
         id: `way/${el.id}`,
         geometry: { type: "LineString", coordinates: coords },
         properties: {
           kind: "road",
-          highway: el.tags?.highway ?? null,
+          highway,
           name: el.tags?.name ?? null,
+          maxspeed_mph: maxspeedMph,
+          maxspeed_source: parsedMph != null ? "osm" : (maxspeedMph != null ? "derived" : null),
+          lanes_count: lanesCount,
+          lanes_source: parsedLanes != null ? "osm" : (lanesCount != null ? "derived" : null),
+          oneway_bool: onewayVal,
+          oneway_source: parsedOneway != null ? "osm" : (onewayVal != null ? "derived" : null),
         },
       });
     } else if (el.type === "node") {
@@ -189,6 +309,15 @@ function buildFallback(
         kind: "road",
         highway: i % 3 === 0 ? "primary" : "residential",
         name: `Sample Road ${i + 1}`,
+        maxspeed: null,
+        maxspeed_mph: i % 3 === 0 ? 35 : 25,
+        maxspeed_source: "derived",
+        lanes: null,
+        lanes_count: i % 3 === 0 ? 2 : 1,
+        lanes_source: "derived",
+        oneway: null,
+        oneway_bool: "no",
+        oneway_source: "derived",
         ...(i === 0 ? { _fallback: true } : {}),
       },
     });
