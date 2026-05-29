@@ -21,8 +21,8 @@ describe("synthesizeLanelet", () => {
   const fc = loadFixture();
   const result = synthesizeLanelet(fc);
 
-  it("emits at least 150 lanelet relations plus regulatory elements", () => {
-    expect(result.laneletCount).toBeGreaterThanOrEqual(150);
+  it("emits at least 500 lanelet relations plus regulatory elements", () => {
+    expect(result.laneletCount).toBeGreaterThanOrEqual(500);
     const relCount = (result.xml.match(/<relation\b/g) ?? []).length;
     // Lanelet relations + regulatory element relations
     expect(relCount).toBe(result.laneletCount + result.regulatoryElementCount);
