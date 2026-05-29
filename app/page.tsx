@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
-import Link from "next/link";
 import type { FeatureCollection } from "geojson";
 import { asset } from "@/lib/asset";
 import {
@@ -24,6 +23,9 @@ import { RULES, runValidators } from "@/lib/validators";
 import RuleLegend from "@/components/RuleLegend";
 import TileSignals from "@/components/TileSignals";
 import ReadinessVerdict from "@/components/ReadinessVerdict";
+import TopBar from "@/components/TopBar";
+import KpiStrip from "@/components/KpiStrip";
+import { computeKPIs } from "@/lib/kpi";
 import { rollupTagsForTile } from "@/lib/osm/tag-rollup";
 import type { MapViewHandle } from "@/components/MapView";
 
@@ -190,20 +192,10 @@ export default function TriagePage() {
     ),
   }), [baseTiles, flagsByTile]);
 
-  const stats = useMemo(() => {
-    const total = tiles.features.length;
-    let above = 0;
-    for (const f of tiles.features) {
-      if (f.properties.readiness_score >= threshold) above++;
-    }
-    return {
-      total,
-      above,
-      flagged: total - above,
-      pct: total ? (above / total) * 100 : 0,
-      flagsTotal: flags.length,
-    };
-  }, [tiles, threshold, flags]);
+  const stats = useMemo(
+    () => computeKPIs(tiles, flags, threshold),
+    [tiles, flags, threshold],
+  );
 
   const handleTileClick = (f: TileFeature) => setSelected(f.properties);
   const queueKey = selected ? `${selected.city}:${selected.tile_id}` : "";
@@ -221,6 +213,7 @@ export default function TriagePage() {
   return (
     <div className="flex h-screen flex-col bg-gray-950 text-gray-100">
       <TopBar active="triage" />
+      <KpiStrip kpis={stats} cityLabel={CITIES[city].label} threshold={threshold} />
       <div className="flex flex-1 min-h-0">
         <Sidebar
           city={city}
@@ -262,44 +255,6 @@ export default function TriagePage() {
           }}
         />
       </div>
-      <StatsStrip {...stats} />
-    </div>
-  );
-}
-
-function TopBar({ active }: { active: "triage" | "diff" | "lanelet" }) {
-  return (
-    <div className="flex h-12 items-center justify-between border-b border-gray-800 bg-gray-950 px-4">
-      <div className="flex items-center gap-2">
-        <div className="h-2 w-2 rounded-sm bg-indigo-400" />
-        <span className="text-sm font-medium tracking-tight">AV Map Quality Console</span>
-      </div>
-      <nav className="flex gap-1 text-xs">
-        <Link
-          href="/"
-          className={`rounded px-2.5 py-1 ${
-            active === "triage" ? "bg-gray-800 text-indigo-300" : "text-gray-400 hover:text-gray-200"
-          }`}
-        >
-          Triage
-        </Link>
-        <Link
-          href="/diff"
-          className={`rounded px-2.5 py-1 ${
-            active === "diff" ? "bg-gray-800 text-indigo-300" : "text-gray-400 hover:text-gray-200"
-          }`}
-        >
-          Diff
-        </Link>
-        <Link
-          href="/lanelet"
-          className={`rounded px-2.5 py-1 ${
-            active === "lanelet" ? "bg-gray-800 text-indigo-300" : "text-gray-400 hover:text-gray-200"
-          }`}
-        >
-          Lanelet2
-        </Link>
-      </nav>
     </div>
   );
 }
@@ -610,20 +565,8 @@ function Bar({ label, value, accent = false }: { label: string; value: number; a
   );
 }
 
-function StatsStrip({
-  total, above, flagged, pct, flagsTotal,
-}: {
-  total: number; above: number; flagged: number; pct: number; flagsTotal: number;
-}) {
-  return (
-    <div className="flex h-10 items-center gap-6 border-t border-gray-800 bg-gray-950 px-4 text-xs">
-      <Stat label="total tiles" value={total.toString()} />
-      <Stat label="above threshold" value={`${pct.toFixed(1)}%`} />
-      <Stat label="flagged" value={flagged.toString()} highlight={flagged > 0} />
-      <Stat label="above count" value={above.toString()} />
-      <Stat label="validator flags" value={flagsTotal.toLocaleString()} />
-    </div>
-  );
+function StatsStrip(_: { total: number; ready: number; flagged: number; pctReady: number; flagsTotal: number }) {
+  return null;
 }
 
 function Stat({ label, value, highlight }: { label: string; value: string; highlight?: boolean }) {

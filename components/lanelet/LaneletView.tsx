@@ -2,11 +2,11 @@
 
 import { useEffect, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
-import Link from "next/link";
 import { parseLanelet2Osm } from "@/lib/lanelet2/parser";
 import { buildLaneletGeoJSON, type LaneletPolygonProperties } from "@/lib/lanelet2/toGeoJSON";
 import LaneletSidebar from "./LaneletSidebar";
 import { asset } from "@/lib/asset";
+import TopBar from "@/components/TopBar";
 
 const LaneletMap = dynamic(() => import("./LaneletMap"), { ssr: false });
 
@@ -79,7 +79,7 @@ export default function LaneletView() {
 
   return (
     <div className="flex h-screen flex-col bg-gray-950 text-gray-100">
-      <TopBar />
+      <TopBar active="lanelet" />
       <div className="flex flex-1 min-h-0">
         <LaneletSidebar
           stats={stats}
@@ -130,27 +130,7 @@ function SourceBanner() {
   );
 }
 
-function TopBar() {
-  return (
-    <div className="flex h-12 items-center justify-between border-b border-gray-800 bg-gray-950 px-4">
-      <div className="flex items-center gap-2">
-        <div className="h-2 w-2 rounded-sm bg-indigo-400" />
-        <span className="text-sm font-medium tracking-tight">AV Map Quality Console</span>
-      </div>
-      <nav className="flex gap-1 text-xs">
-        <Link href="/" className="rounded px-2.5 py-1 text-gray-400 hover:text-gray-200">
-          Triage
-        </Link>
-        <Link href="/diff" className="rounded px-2.5 py-1 text-gray-400 hover:text-gray-200">
-          Diff
-        </Link>
-        <Link href="/lanelet" className="rounded bg-gray-800 px-2.5 py-1 text-indigo-300">
-          Lanelet2
-        </Link>
-      </nav>
-    </div>
-  );
-}
+function _RemovedLocalTopBar() { return null; }
 
 function StatusBar({
   stats,

@@ -1,7 +1,6 @@
 'use client';
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import Link from 'next/link';
 import type {
   Feature,
   FeatureCollection,
@@ -27,6 +26,7 @@ import type {
 } from '@/lib/review/types';
 import DiffMapPane, { type DiffMapRef } from './DiffMapPane';
 import EditCard from './EditCard';
+import TopBar from '@/components/TopBar';
 import AuditLogPanel from './AuditLogPanel';
 import OpenLRPanel from './OpenLRPanel';
 import { encodeLineLocation, bearingDeg, haversineMeters } from '@/lib/openlr/encode';
@@ -395,14 +395,7 @@ const DiffReviewer: React.FC = () => {
 
   return (
     <div className="flex flex-col h-screen bg-gray-950 text-gray-100 overflow-hidden">
-      <header className="h-[48px] border-b border-gray-800 flex items-center justify-between px-4 shrink-0 bg-gray-950 z-10">
-        <div className="font-medium text-gray-200">AV Map Quality Console</div>
-        <nav className="flex gap-6 text-sm">
-          <Link href="/" className="text-gray-500 hover:text-gray-300 transition-colors">Triage</Link>
-          <Link href="/diff" className="text-indigo-400 font-medium">Review queue</Link>
-          <Link href="/lanelet" className="text-gray-500 hover:text-gray-300 transition-colors">Lanelet2</Link>
-        </nav>
-      </header>
+      <TopBar active="diff" />
 
       <div className="bg-gray-900 border-b border-gray-800 px-4 py-2 flex flex-wrap items-center gap-4 text-[11px] font-mono uppercase tracking-wider text-gray-400 shrink-0">
         <span className="text-gray-300">
