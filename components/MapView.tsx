@@ -8,6 +8,7 @@ import type { Flag } from "@/lib/validators";
 
 export interface MapViewHandle {
   flyTo: (lng: number, lat: number, zoom?: number) => void;
+  getMap: () => maplibregl.Map | null;
 }
 
 interface MapViewProps {
@@ -185,6 +186,7 @@ const MapView = forwardRef<MapViewHandle, MapViewProps>(function MapView(props, 
       if (!map) return;
       map.flyTo({ center: [lng, lat], zoom: zoom ?? Math.max(map.getZoom(), 16), duration: 600 });
     },
+    getMap: () => mapRef.current,
   }));
 
   useEffect(() => {

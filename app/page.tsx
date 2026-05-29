@@ -28,6 +28,7 @@ import KpiStrip from "@/components/KpiStrip";
 import { computeKPIs } from "@/lib/kpi";
 import { rollupTagsForTile } from "@/lib/osm/tag-rollup";
 import type { MapViewHandle } from "@/components/MapView";
+import RouteSim from "@/components/RouteSim";
 
 const MapView = dynamic(() => import("@/components/MapView"), { ssr: false });
 
@@ -65,6 +66,7 @@ export default function TriagePage() {
   const [dataSource, setDataSource] = useState<DataSource>("osm");
   const [threshold, setThreshold] = useState(0.8);
   const [showOnlyFlagged, setShowOnlyFlagged] = useState(false);
+  const [routeSimActive, setRouteSimActive] = useState(false);
   const [selected, setSelected] = useState<TileProperties | null>(null);
   const [queued, setQueued] = useState<Record<string, boolean>>({});
   const [flagsByCity, setFlagsByCity] = useState<Record<CityId, Flag[]>>({ sf: [], mv: [] });
@@ -217,7 +219,7 @@ export default function TriagePage() {
       <div className="flex flex-1 min-h-0">
         <Sidebar
           city={city}
-          setCity={(c) => { setCity(c); setSelected(null); }}
+          setCity={(c) => { setCity(c); setSelected(null); setRouteSimActive(false); }}
           dataSource={dataSource}
           setDataSource={(s) => { setDataSource(s); setSelected(null); }}
           overtureAvailable={!!OVERTURE_AVAILABLE[city]}
@@ -226,6 +228,8 @@ export default function TriagePage() {
           showOnlyFlagged={showOnlyFlagged}
           setShowOnlyFlagged={setShowOnlyFlagged}
           flagCount={flags.length}
+          routeSimActive={routeSimActive}
+          setRouteSimActive={setRouteSimActive}
         />
         <div className="relative flex-1">
           <MapView
@@ -237,9 +241,17 @@ export default function TriagePage() {
             flags={flags}
             roads={roads}
             sourceLabel={SOURCE_LABEL[effectiveSource]}
-            onTileClick={handleTileClick}
+            onTileClick={routeSimActive ? () => {} : handleTileClick}
           />
           <RuleLegend />
+          {routeSimActive && (
+            <RouteSim
+              map={mapRef.current?.getMap() ?? null}
+              tiles={tiles}
+              flags={flags}
+              threshold={threshold}
+            />
+          )}
         </div>
         <DetailPanel
           selected={selected}
@@ -270,10 +282,13 @@ function Sidebar(props: {
   showOnlyFlagged: boolean;
   setShowOnlyFlagged: (b: boolean) => void;
   flagCount: number;
+  routeSimActive: boolean;
+  setRouteSimActive: (b: boolean) => void;
 }) {
   const {
     city, setCity, dataSource, setDataSource, overtureAvailable,
     threshold, setThreshold, showOnlyFlagged, setShowOnlyFlagged, flagCount,
+    routeSimActive, setRouteSimActive,
   } = props;
   return (
     <aside className="flex w-80 shrink-0 flex-col gap-5 border-r border-gray-800 bg-gray-950 px-4 py-4">
@@ -334,6 +349,23 @@ function Sidebar(props: {
           onChange={(e) => setThreshold(parseFloat(e.target.value))}
           className="mt-2 w-full accent-indigo-500"
         />
+      </Section>
+
+      <Section title="Route sim">
+        <label className="flex cursor-pointer items-center gap-2 text-xs text-gray-300">
+          <input
+            type="checkbox"
+            checked={routeSimActive}
+            onChange={(e) => setRouteSimActive(e.target.checked)}
+            className="h-3.5 w-3.5 accent-indigo-500"
+          />
+          Route sim
+        </label>
+        {routeSimActive && (
+          <div className="mt-1 text-[10px] leading-snug text-gray-500">
+            Click two points on the map to simulate a route and count low-readiness handoffs.
+          </div>
+        )}
       </Section>
 
       <Section title="Filter">
