@@ -254,6 +254,7 @@ export default function TriagePage() {
           rollup={selectedRollup}
           sourceLabel={SOURCE_LABEL[effectiveSource]}
           isQueued={!!isQueued}
+          threshold={threshold}
           onQueue={() => { if (queueKey) setQueued((q) => ({ ...q, [queueKey]: true })); }}
           onFlyToFlag={(f) => {
             const p = flagCentroid(f);
@@ -441,13 +442,14 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 }
 
 function DetailPanel({
-  selected, selectedFlags, rollup, sourceLabel, isQueued, onQueue, onFlyToFlag,
+  selected, selectedFlags, rollup, sourceLabel, isQueued, threshold, onQueue, onFlyToFlag,
 }: {
   selected: TileProperties | null;
   selectedFlags: Flag[];
   rollup: import("@/lib/osm/tag-rollup").TileTagRollup | null;
   sourceLabel: string;
   isQueued: boolean;
+  threshold: number;
   onQueue: () => void;
   onFlyToFlag: (f: Flag) => void;
 }) {
@@ -462,6 +464,7 @@ function DetailPanel({
           rollup={rollup}
           sourceLabel={sourceLabel}
           isQueued={isQueued}
+          threshold={threshold}
           onQueue={onQueue}
           onFlyToFlag={onFlyToFlag}
         />
@@ -483,13 +486,14 @@ function FlagBadgeRow({ flags }: { flags: Flag[] }) {
 }
 
 function SelectedDetail({
-  tile, flags, rollup, sourceLabel, isQueued, onQueue, onFlyToFlag,
+  tile, flags, rollup, sourceLabel, isQueued, threshold, onQueue, onFlyToFlag,
 }: {
   tile: TileProperties;
   flags: Flag[];
   rollup: import("@/lib/osm/tag-rollup").TileTagRollup | null;
   sourceLabel: string;
   isQueued: boolean;
+  threshold: number;
   onQueue: () => void;
   onFlyToFlag: (f: Flag) => void;
 }) {
@@ -505,7 +509,7 @@ function SelectedDetail({
         <div className="mt-2"><FlagBadgeRow flags={flags} /></div>
       </div>
 
-      <ReadinessVerdict tile={tile} flags={flags} />
+      <ReadinessVerdict tile={tile} flags={flags} threshold={threshold} />
 
       {rollup && <TileSignals rollup={rollup} sourceLabel={sourceLabel} />}
 

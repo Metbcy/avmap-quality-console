@@ -215,13 +215,10 @@ const MapView = forwardRef<MapViewHandle, MapViewProps>(function MapView(props, 
         type: "fill",
         source: TILE_SOURCE,
         paint: {
-          "fill-color": [
-            "match", ["get", "bucket"],
-            2, "#22c55e",
-            1, "#eab308",
-            0, "#ef4444",
-            "#888888",
-          ],
+          // fill-color is recomputed live from the threshold slider via
+          // setPaintProperty in the threshold effect below. Initial value
+          // is a neutral gray; the effect overrides on first paint.
+          "fill-color": "#888888",
           "fill-opacity": [
             "match", ["get", "bucket"],
             2, 0.25,
@@ -340,6 +337,21 @@ const MapView = forwardRef<MapViewHandle, MapViewProps>(function MapView(props, 
         : null;
       map.setFilter("tiles-fill", filter);
       map.setFilter("tiles-line", filter);
+
+      // Live recolor: green at/above threshold, yellow in a 0.15 caution band
+      // just below, red further below. Slider becomes a "what counts as
+      // ready?" knob with immediate visual feedback even when the
+      // showOnlyFlagged filter is off.
+      const caution = Math.max(0, threshold - 0.15);
+      const fillColor: maplibregl.ExpressionSpecification = [
+        "step",
+        ["get", "readiness_score"],
+        "#ef4444",        // < caution
+        caution, "#eab308", // caution .. threshold
+        threshold, "#22c55e", // >= threshold
+      ];
+      map.setPaintProperty("tiles-fill", "fill-color", fillColor);
+      map.setPaintProperty("tiles-line", "line-color", fillColor);
       return true;
     };
     if (apply()) return;

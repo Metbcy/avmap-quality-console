@@ -2,7 +2,7 @@
 
 // Plain-English readiness verdict for a tile. Translates the numeric
 // readiness_score + validator flag mix into a single sentence a non-technical
-// reader can act on. No new scoring logic — this is presentation only.
+// reader can act on. No new scoring logic, this is presentation only.
 
 import type { TileProperties } from "@/lib/scoring";
 import type { Flag } from "@/lib/validators";
@@ -11,6 +11,7 @@ import { countFlagsBySeverity } from "@/lib/scoring";
 interface Props {
   tile: TileProperties;
   flags: Flag[];
+  threshold?: number;
 }
 
 type Verdict = {
@@ -21,9 +22,17 @@ type Verdict = {
   bgClass: string;
 };
 
-export function verdictFor(tile: TileProperties, flags: Flag[]): Verdict {
+const DEFAULT_THRESHOLD = 0.9;
+const CAUTION_BAND = 0.15;
+
+export function verdictFor(
+  tile: TileProperties,
+  flags: Flag[],
+  threshold: number = DEFAULT_THRESHOLD,
+): Verdict {
   const counts = countFlagsBySeverity(flags);
   const score = tile.readiness_score;
+  const caution = Math.max(0, threshold - CAUTION_BAND);
 
   // High-severity flag is a hard block regardless of score.
   if (counts.high > 0) {
@@ -36,7 +45,7 @@ export function verdictFor(tile: TileProperties, flags: Flag[]): Verdict {
     };
   }
 
-  if (score >= 0.9 && counts.med === 0) {
+  if (score >= threshold && counts.med === 0) {
     return {
       emoji: "✅",
       headline: "Ready for autonomous driving",
@@ -46,7 +55,7 @@ export function verdictFor(tile: TileProperties, flags: Flag[]): Verdict {
     };
   }
 
-  if (score >= 0.75) {
+  if (score >= caution) {
     const hint = counts.med > 0
       ? `${counts.med} medium-severity issue${counts.med === 1 ? "" : "s"} worth a second look`
       : "minor signal degradation";
@@ -62,14 +71,14 @@ export function verdictFor(tile: TileProperties, flags: Flag[]): Verdict {
   return {
     emoji: "🚧",
     headline: "Needs map work before AV use",
-    body: "Too many quality signals are weak here — markings, stop signs, or sensor agreement. Send this block back to the mapping team before letting an AV drive it.",
+    body: "Too many quality signals are weak here: markings, stop signs, or sensor agreement. Send this block back to the mapping team before letting an AV drive it.",
     toneClass: "border-orange-700/60 text-orange-200",
     bgClass: "bg-orange-950/30",
   };
 }
 
-export default function ReadinessVerdict({ tile, flags }: Props) {
-  const v = verdictFor(tile, flags);
+export default function ReadinessVerdict({ tile, flags, threshold }: Props) {
+  const v = verdictFor(tile, flags, threshold);
   const pct = Math.round(tile.readiness_score * 100);
   return (
     <div
