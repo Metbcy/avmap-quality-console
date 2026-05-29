@@ -1,5 +1,7 @@
 # AV Map Quality & Diff Console
 
+**Live demo:** https://metbcy.github.io/avmap-quality-console/
+
 An independent open-source prototype exploring tooling for high-stakes geospatial data quality — the kind of internal console an ops team might use to triage HD-map tiles and review pending edits before they ship to fleet.
 
 Built in a few hours with Next.js + MapLibre on top of real OpenStreetMap extracts. All scores and diffs are synthetic, generated locally from a deterministic seeded PRNG so the views are reproducible without a backend.

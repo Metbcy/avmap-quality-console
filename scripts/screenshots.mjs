@@ -42,6 +42,14 @@ async function main() {
   await page.goto(`${BASE}/${Q}`, { waitUntil: "networkidle" });
   await settle(page, 2500);
   console.log("errs after first load:", errs.length, errs.slice(0, 5));
+  // Splash screenshot first (before dismissing) , captures the new "by Amir Bredy" byline
+  await shot(page, "splash-overlay.png");
+  // Dismiss splash so subsequent shots and clicks aren't blocked
+  const splashBtn = page.locator('[data-testid="splash-get-started"]');
+  if (await splashBtn.count()) {
+    await splashBtn.click().catch(() => {});
+    await page.waitForTimeout(400);
+  }
   await shot(page, "triage-overview.png");
 
   // 2. Triage filtered , set threshold to 0.92 and toggle "show only flagged"
