@@ -277,12 +277,19 @@ const MapView = forwardRef<MapViewHandle, MapViewProps>(function MapView(props, 
     const map = mapRef.current;
     if (!map) return;
     const data: FeatureCollection = roads ?? { type: "FeatureCollection", features: [] };
-    const apply = () => {
+    // Gate on the source existing, not on isStyleLoaded(): style can read as
+    // "not loaded" mid-transition, and `once("load", ...)` would silently
+    // never fire (load only fires once per map). Retry via "idle" instead.
+    const apply = (): boolean => {
       const src = map.getSource(ROADS_SOURCE) as maplibregl.GeoJSONSource | undefined;
-      if (src) src.setData(data);
+      if (!src) return false;
+      src.setData(data);
+      return true;
     };
-    if (map.isStyleLoaded()) apply();
-    else map.once("load", apply);
+    if (apply()) return;
+    const retry = () => { if (apply()) map.off("idle", retry); };
+    map.on("idle", retry);
+    return () => { map.off("idle", retry); };
   }, [roads]);
 
   useEffect(() => {
@@ -295,39 +302,50 @@ const MapView = forwardRef<MapViewHandle, MapViewProps>(function MapView(props, 
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
-    const apply = () => {
+    const apply = (): boolean => {
       const src = map.getSource(TILE_SOURCE) as maplibregl.GeoJSONSource | undefined;
-      if (src) src.setData(tiles);
+      if (!src) return false;
+      src.setData(tiles);
+      return true;
     };
-    if (map.isStyleLoaded()) apply();
-    else map.once("load", apply);
+    if (apply()) return;
+    const retry = () => { if (apply()) map.off("idle", retry); };
+    map.on("idle", retry);
+    return () => { map.off("idle", retry); };
   }, [tiles]);
 
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
-    const apply = () => {
+    const apply = (): boolean => {
       const src = map.getSource(FLAGS_SOURCE) as maplibregl.GeoJSONSource | undefined;
-      if (!src) return;
+      if (!src) return false;
       const fc: FeatureCollection = { type: "FeatureCollection", features: flags };
       src.setData(fc);
+      return true;
     };
-    if (map.isStyleLoaded()) apply();
-    else map.once("load", apply);
+    if (apply()) return;
+    const retry = () => { if (apply()) map.off("idle", retry); };
+    map.on("idle", retry);
+    return () => { map.off("idle", retry); };
   }, [flags]);
 
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
-    const apply = () => {
+    const apply = (): boolean => {
+      if (!map.getLayer("tiles-fill") || !map.getLayer("tiles-line")) return false;
       const filter: maplibregl.FilterSpecification | null = showOnlyFlagged
         ? ["<", ["get", "readiness_score"], threshold]
         : null;
-      if (map.getLayer("tiles-fill")) map.setFilter("tiles-fill", filter);
-      if (map.getLayer("tiles-line")) map.setFilter("tiles-line", filter);
+      map.setFilter("tiles-fill", filter);
+      map.setFilter("tiles-line", filter);
+      return true;
     };
-    if (map.isStyleLoaded()) apply();
-    else map.once("load", apply);
+    if (apply()) return;
+    const retry = () => { if (apply()) map.off("idle", retry); };
+    map.on("idle", retry);
+    return () => { map.off("idle", retry); };
   }, [threshold, showOnlyFlagged]);
 
   if (nogl) return <NoGlMapView {...props} />;
